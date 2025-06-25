@@ -12,20 +12,15 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
-    "@orbs-network/ton-access": "^2.3.3",
     "@tonconnect/sdk": "3",
     "@tonconnect/ui-react": "2",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "ton": "^13.9.0",
-    "ton-core": "^0.53.0",
-    "ton-crypto": "^3.2.0"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "gh-pages": "^6.1.1",
     "typescript": "~5.7.2",
-    "vite": "^6.2.0",
-    "vite-plugin-node-polyfills": "^0.23.0"
+    "vite": "^6.2.0"
   }
 }

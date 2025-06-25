@@ -5,22 +5,23 @@ import { Modal } from './components/Modal';
 import { NftItemCard } from './components/NftItemCard';
 import { Spinner } from './components/Spinner';
 import { UserProfile } from './components/UserProfile';
+import { AddFundsModal } from './components/AddFundsModal';
 import { CrashGameView } from './components/CrashGameView'; 
 import { CaseDetailView } from './components/CaseDetailView';
 import { 
-    CASES, NFT_ITEMS,
+    CASES, NFT_ITEMS, INITIAL_TON_BALANCE, APP_WALLET_ADDRESS, TON_NANO_MULTIPLIER,
     CRASH_GAME_PHASE_TIMINGS, CRASH_GAME_MAX_HISTORY, CRASH_GAME_HOUSE_EDGE_PROBABILITY,
     CRASH_POINT_SKEW_POWER, CRASH_POINT_MAX_RANDOM_FACTOR, USER_CRASH_BET_HISTORY_MAX_LENGTH,
     USER_CASE_OPENING_HISTORY_MAX_LENGTH, USER_SOLD_ITEMS_HISTORY_MAX_LENGTH
 } from './constants';
 import type { ChosenNFT, NFTItem, Case, InventoryNFTItem, CrashRound, CrashDataPoint, UserCrashBetRecord, UserCaseOpeningRecord, UserSoldItemRecord } from './types';
 import { Rarity, CrashGameState, UserCrashBetOutcome } from './types';
-import { useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-react';
-import { TonClient, fromNano, toNano } from "ton";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
+import { SendTransactionRequest, toNano } from '@tonconnect/sdk';
+
 
 const App: React.FC = () => {
-  const [balance, setBalance] = useState<number>(0);
+  const [balance, setBalance] = useState<number>(INITIAL_TON_BALANCE);
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
   const [viewingCaseDetails, setViewingCaseDetails] = useState<Case | null>(null);
   const [isOpening, setIsOpening] = useState<boolean>(false);
@@ -30,61 +31,27 @@ const App: React.FC = () => {
   const [spinnerItems, setSpinnerItems] = useState<NFTItem[]>([]);
   const [inventory, setInventory] = useState<InventoryNFTItem[]>([]);
   const [currentView, setCurrentView] = useState<'cases' | 'profile' | 'crash'>('cases');
+  const [showAddFundsModal, setShowAddFundsModal] = useState<boolean>(false);
   const [wonItemProcessed, setWonItemProcessed] = useState<boolean>(false);
 
   const [tonConnectUI] = useTonConnectUI();
   const wallet = useTonWallet();
-  const userFriendlyAddress = useTonAddress();
 
-  const tonClient = useRef<TonClient | null>(null);
-
-  useEffect(() => {
-      const initializeClient = async () => {
-          try {
-              const endpoint = await getHttpEndpoint({ network: "mainnet" });
-              tonClient.current = new TonClient({ endpoint });
-          } catch (error) {
-              console.error("Failed to initialize TonClient:", error);
-          }
-      };
-      initializeClient();
-  }, []);
-
-  const fetchBalance = useCallback(async () => {
-      if (!wallet || !tonClient.current) {
-          setBalance(0);
-          return;
-      }
-      try {
-          const balanceNano = await tonClient.current.getBalance(userFriendlyAddress);
-          setBalance(Number(fromNano(balanceNano)));
-      } catch (error) {
-          console.error("Failed to get wallet balance:", error);
-          setNotification("Couldn't fetch wallet balance.");
-          setBalance(0);
-      }
-  }, [wallet, userFriendlyAddress]);
-
-  useEffect(() => {
-      fetchBalance();
-      const interval = setInterval(fetchBalance, 15000); // Обновлять баланс каждые 15 секунд
-      return () => clearInterval(interval);
-  }, [fetchBalance]);
-
+  // Crash Game State
   const [crashGameState, setCrashGameState] = useState<CrashGameState>(CrashGameState.IDLE);
   const [crashCurrentMultiplier, setCrashCurrentMultiplier] = useState<number>(1.00);
   const [crashTargetPoint, setCrashTargetPoint] = useState<number | null>(null);
-  const crashTargetPointRef = useRef<number | null>(null);
+  const crashTargetPointRef = useRef<number | null>(null); 
   const [crashUserBetAmount, setCrashUserBetAmount] = useState<number | null>(null);
   const crashUserBetAmountRef = useRef<number | null>(null);
-  const [crashUserCashedOutAt, setCrashUserCashedOutAt] = useState<number | null>(null);
+  const [crashUserCashedOutAt, setCrashUserCashedOutAt] = useState<number | null>(null); 
   const crashUserCashedOutAtRef = useRef<number | null>(null);
-  const [crashCountdown, setCrashCountdown] = useState<number>(0);
-  const [crashPhaseTotalTime, setCrashPhaseTotalTime] = useState<number>(0);
-  const [crashHistory, setCrashHistory] = useState<CrashRound[]>([]);
-  const [userCrashBetHistory, setUserCrashBetHistory] = useState<UserCrashBetRecord[]>([]);
-  const [userCaseOpeningHistory, setUserCaseOpeningHistory] = useState<UserCaseOpeningRecord[]>([]);
-  const [userSoldItemsHistory, setUserSoldItemsHistory] = useState<UserSoldItemRecord[]>([]);
+  const [crashCountdown, setCrashCountdown] = useState<number>(0); 
+  const [crashPhaseTotalTime, setCrashPhaseTotalTime] = useState<number>(0); 
+  const [crashHistory, setCrashHistory] = useState<CrashRound[]>([]); 
+  const [userCrashBetHistory, setUserCrashBetHistory] = useState<UserCrashBetRecord[]>([]); 
+  const [userCaseOpeningHistory, setUserCaseOpeningHistory] = useState<UserCaseOpeningRecord[]>([]); 
+  const [userSoldItemsHistory, setUserSoldItemsHistory] = useState<UserSoldItemRecord[]>([]); 
   const [crashBetAmountInput, setCrashBetAmountInput] = useState<string>("");
   const [crashErrorMessage, setCrashErrorMessage] = useState<string | null>(null);
   const [crashRoundDataPoints, setCrashRoundDataPoints] = useState<CrashDataPoint[]>([]);
@@ -101,9 +68,18 @@ const App: React.FC = () => {
   useEffect(() => { crashUserCashedOutAtRef.current = crashUserCashedOutAt; }, [crashUserCashedOutAt]);
   useEffect(() => { crashUserAutoCashoutTargetRef.current = crashUserAutoCashoutTarget; }, [crashUserAutoCashoutTarget]);
 
+
   useEffect(() => {
     const savedInventory = localStorage.getItem('nftInventory');
     if (savedInventory) setInventory(JSON.parse(savedInventory));
+    
+    const savedBalance = localStorage.getItem('userBalance');
+    if (savedBalance) {
+        setBalance(parseFloat(savedBalance));
+    } else {
+        setBalance(INITIAL_TON_BALANCE);
+    }
+
     const savedCrashHistory = localStorage.getItem('crashHistory');
     if (savedCrashHistory) setCrashHistory(JSON.parse(savedCrashHistory));
     const savedUserCrashBetHistory = localStorage.getItem('userCrashBetHistory');
@@ -115,10 +91,12 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => { localStorage.setItem('nftInventory', JSON.stringify(inventory)); }, [inventory]);
+  useEffect(() => { localStorage.setItem('userBalance', balance.toString()); }, [balance]);
   useEffect(() => { localStorage.setItem('crashHistory', JSON.stringify(crashHistory)); }, [crashHistory]);
   useEffect(() => { localStorage.setItem('userCrashBetHistory', JSON.stringify(userCrashBetHistory)); }, [userCrashBetHistory]);
   useEffect(() => { localStorage.setItem('userCaseOpeningHistory', JSON.stringify(userCaseOpeningHistory)); }, [userCaseOpeningHistory]);
   useEffect(() => { localStorage.setItem('userSoldItemsHistory', JSON.stringify(userSoldItemsHistory)); }, [userSoldItemsHistory]);
+
 
   useEffect(() => {
     let timerId: number | undefined;
@@ -127,6 +105,64 @@ const App: React.FC = () => {
     }
     return () => { if (timerId) clearTimeout(timerId); };
   }, [notification]);
+
+  // --- ВОССТАНАВЛИВАЕМ ЛОГИКУ КНОПКИ "DEPOSIT TON" ---
+  const handleOpenAddFundsModal = useCallback(() => {
+    if (!wallet) { 
+        setNotification("Please connect your wallet first."); 
+        return; 
+    }
+    setShowAddFundsModal(true);
+  }, [wallet]);
+
+  const handleCloseAddFundsModal = useCallback(() => setShowAddFundsModal(false), []);
+
+  const handleConfirmDeposit = useCallback(async (amount: number) => {
+    if (!wallet || !tonConnectUI) { 
+        setNotification("Wallet not connected."); 
+        return; 
+    }
+    if (amount <= 0) { 
+        setNotification("Deposit amount must be positive."); 
+        return; 
+    }
+
+    const transaction: SendTransactionRequest = {
+      validUntil: Math.floor(Date.now() / 1000) + 600,
+      messages: [{ 
+          address: APP_WALLET_ADDRESS, 
+          amount: toNano(amount).toString() 
+      }],
+    };
+
+    try {
+      setNotification("Sending transaction... Please confirm in your wallet.");
+      const result = await tonConnectUI.sendTransaction(transaction);
+      
+      // Имитируем ожидание подтверждения транзакции в блокчейне
+      setNotification("Transaction sent! Waiting for confirmation...");
+      
+      // Здесь в реальном приложении нужно было бы слушать блокчейн,
+      // но для простоты мы просто добавляем баланс сразу после отправки.
+      setBalance(prev => prev + amount);
+      setNotification(`Successfully deposited ${amount} TON!`);
+
+    } catch (error: unknown) {
+      console.error("TON Connect transaction failed:", error);
+      let errorMessage = "Transaction failed or rejected.";
+      if (error instanceof Error) {
+        if (error.message.toLowerCase().includes('user rejected')) {
+            errorMessage = "Transaction rejected by user.";
+        } else if (error.message.toLowerCase().includes('aborted')) {
+            errorMessage = "Transaction aborted.";
+        }
+      }
+      setNotification(errorMessage);
+    } finally {
+      setShowAddFundsModal(false);
+    }
+  }, [wallet, tonConnectUI]);
+  // --------------------------------------------------------
 
   const addUserCaseOpeningRecord = useCallback((caseData: Case, nftData: ChosenNFT) => {
     setUserCaseOpeningHistory(prev => {
@@ -164,20 +200,20 @@ const App: React.FC = () => {
     for (const item of lootTable) {
       if (randomWeight < item.weight) {
         const nft = NFT_ITEMS.find(nftItem => nftItem.id === item.nftId);
-        return nft || NFT_ITEMS[0];
+        return nft || NFT_ITEMS[0]; 
       }
       randomWeight -= item.weight;
     }
-    return NFT_ITEMS.find(nft => nft.id === lootTable[0].nftId) || NFT_ITEMS[0];
+    return NFT_ITEMS.find(nft => nft.id === lootTable[0].nftId) || NFT_ITEMS[0]; 
   }, []);
 
   const prepareSpinnerItems = useCallback((targetNft: NFTItem, caseData: Case): NFTItem[] => {
     const itemsForSpinner: NFTItem[] = [];
-    const numItems = 50;
+    const numItems = 50; 
     const targetIndex = Math.floor(numItems * 0.75);
     const caseNftIds = new Set(caseData.lootTable.map(item => item.nftId));
     const nftsInCase = NFT_ITEMS.filter(nft => caseNftIds.has(nft.id));
-    if (nftsInCase.length === 0) return Array(numItems).fill(NFT_ITEMS[0]);
+    if (nftsInCase.length === 0) return Array(numItems).fill(NFT_ITEMS[0]); 
 
     for (let i = 0; i < numItems; i++) {
       itemsForSpinner.push(i === targetIndex ? targetNft : nftsInCase[Math.floor(Math.random() * nftsInCase.length)]);
@@ -194,46 +230,23 @@ const App: React.FC = () => {
     setViewingCaseDetails(null);
   }, []);
 
-  const handleOpenCaseFromDetail = useCallback(async (caseData: Case) => {
-    if (!wallet) {
-        setNotification("Please connect your wallet to play!");
-        return;
-    }
-    if (balance < caseData.priceTon) {
-        setNotification("Insufficient TON balance in your wallet!");
-        return;
-    }
+  const handleOpenCaseFromDetail = useCallback((caseData: Case) => {
+    if (balance < caseData.priceTon) { setNotification("Insufficient TON balance!"); return; }
     if (isOpening) return;
+    
+    // Списываем с внутреннего баланса, а не через транзакцию
+    setBalance(prev => prev - caseData.priceTon);
+    
+    setSelectedCase(caseData);
+    setViewingCaseDetails(null);
+    setIsOpening(true);
+    setWonNft(null); 
+    const newlyWonNft = selectNftForOpening(caseData);
+    setWonNft(newlyWonNft);
+    setWonItemProcessed(false);
+    setSpinnerItems(prepareSpinnerItems(newlyWonNft, caseData));
+  }, [balance, isOpening, selectNftForOpening, prepareSpinnerItems]);
 
-    try {
-        const transaction = {
-            validUntil: Math.floor(Date.now() / 1000) + 600,
-            messages: [
-                {
-                    address: "UQBwDwHoaO4ui_VtMr7c5NiB1lKps-yBGJlORQun_bPQvV75",
-                    amount: toNano(caseData.priceTon).toString(),
-                },
-            ],
-        };
-
-        await tonConnectUI.sendTransaction(transaction);
-        
-        setSelectedCase(caseData);
-        setViewingCaseDetails(null);
-        setIsOpening(true);
-        setWonNft(null);
-        const newlyWonNft = selectNftForOpening(caseData);
-        setWonNft(newlyWonNft);
-        setWonItemProcessed(false);
-        setSpinnerItems(prepareSpinnerItems(newlyWonNft, caseData));
-        
-        await fetchBalance();
-
-    } catch (error) {
-        console.error("Transaction failed", error);
-        setNotification("Transaction failed or was rejected.");
-    }
-  }, [balance, isOpening, selectNftForOpening, prepareSpinnerItems, wallet, tonConnectUI, fetchBalance]);
 
   const handleSpinEnd = useCallback(() => setShowResultModal(true), []);
 
@@ -241,7 +254,7 @@ const App: React.FC = () => {
     if (wonNft && !wonItemProcessed && selectedCase) {
       const newInventoryItem: InventoryNFTItem = { ...wonNft, instanceId: self.crypto.randomUUID() };
       setInventory(prev => [...prev, newInventoryItem]);
-      addUserCaseOpeningRecord(selectedCase, wonNft);
+      addUserCaseOpeningRecord(selectedCase, wonNft); 
       setNotification(`${wonNft.name} added to inventory.`);
     }
     setShowResultModal(false);
@@ -249,54 +262,39 @@ const App: React.FC = () => {
     setSelectedCase(null);
   }, [wonNft, wonItemProcessed, selectedCase, addUserCaseOpeningRecord]);
 
-  const handleSellWonItem = useCallback(async () => {
+  const handleSellWonItem = useCallback(() => {
     if (!wonNft || typeof wonNft.sellPriceTon !== 'number' || !selectedCase) return;
-    
-    setNotification("Selling items is a simulation. No real transaction occurs.");
     const sellPrice = wonNft.sellPriceTon || 0;
-    // В реальном приложении здесь должна быть транзакция С ВАШЕГО СЕРВЕРНОГО КОШЕЛЬКА НА КОШЕЛЕК ПОЛЬЗОВАТЕЛЯ
-    // Это сложная и небезопасная операция для фронтенда.
-    // Поэтому мы просто имитируем пополнение локального баланса.
     setBalance(prev => prev + sellPrice);
-    
-    addUserCaseOpeningRecord(selectedCase, wonNft);
-    addUserSoldItemRecord(wonNft, sellPrice);
+    setNotification(`Sold ${wonNft.name} for ${sellPrice} TON!`);
+    addUserCaseOpeningRecord(selectedCase, wonNft); 
+    addUserSoldItemRecord(wonNft, sellPrice); 
     setWonItemProcessed(true);
-    setShowResultModal(false);
-    setIsOpening(false);
-    setSelectedCase(null);
-    await fetchBalance();
-}, [wonNft, selectedCase, addUserCaseOpeningRecord, addUserSoldItemRecord, fetchBalance]);
-
+    setShowResultModal(false); setIsOpening(false); setSelectedCase(null);
+  }, [wonNft, selectedCase, addUserCaseOpeningRecord, addUserSoldItemRecord]);
 
   const handleKeepWonItem = useCallback(() => {
     if (!wonNft || !selectedCase) return;
     const newInventoryItem: InventoryNFTItem = { ...wonNft, instanceId: self.crypto.randomUUID() };
     setInventory(prev => [...prev, newInventoryItem]);
-    addUserCaseOpeningRecord(selectedCase, wonNft);
+    addUserCaseOpeningRecord(selectedCase, wonNft); 
     setNotification(`${wonNft.name} added to inventory!`);
     setWonItemProcessed(true);
-    setShowResultModal(false);
-    setIsOpening(false);
-    setSelectedCase(null);
+    setShowResultModal(false); setIsOpening(false); setSelectedCase(null);
   }, [wonNft, selectedCase, addUserCaseOpeningRecord]);
 
-  const handleSellFromInventory = useCallback(async (itemInstanceId: string) => {
+  const handleSellFromInventory = useCallback((itemInstanceId: string) => {
     const itemToSell = inventory.find(item => item.instanceId === itemInstanceId);
     if (itemToSell && typeof itemToSell.sellPriceTon === 'number') {
-        setNotification(`Selling ${itemToSell.name} is a simulation.`);
-        const sellPrice = itemToSell.sellPriceTon || 0;
-        // Опять же, симуляция
-        setBalance(prev => prev + sellPrice);
-        setInventory(prev => prev.filter(item => item.instanceId !== itemInstanceId));
-        addUserSoldItemRecord(itemToSell, sellPrice);
-        await fetchBalance();
+      const sellPrice = itemToSell.sellPriceTon || 0;
+      setBalance(prev => prev + sellPrice);
+      setInventory(prev => prev.filter(item => item.instanceId !== itemInstanceId));
+      setNotification(`Sold ${itemToSell.name} for ${sellPrice} TON!`);
+      addUserSoldItemRecord(itemToSell, sellPrice); 
     }
-}, [inventory, addUserSoldItemRecord, fetchBalance]);
+  }, [inventory, addUserSoldItemRecord]);
 
-  // ... (остальной код Crash Game и рендеринга остается таким же, как в предыдущих версиях)
-  // ... (копируйте весь оставшийся код из вашего файла App.tsx)
-
+  // (весь код Crash Game остается здесь без изменений)
   const addUserCrashBetRecord = useCallback((record: Omit<UserCrashBetRecord, 'id' | 'timestamp'>) => {
     setUserCrashBetHistory(prev => {
       const newRecord: UserCrashBetRecord = {
@@ -307,7 +305,6 @@ const App: React.FC = () => {
       return [newRecord, ...prev.slice(0, USER_CRASH_BET_HISTORY_MAX_LENGTH - 1)];
     });
   }, []);
-
   const generateCrashPoint = useCallback((): number => {
     if (Math.random() < CRASH_GAME_HOUSE_EDGE_PROBABILITY) return 1.00;
     const r = Math.random();
@@ -316,17 +313,14 @@ const App: React.FC = () => {
     const point = 1 / (1 - scaledX);
     return Math.max(1.00, parseFloat(point.toFixed(2)));
   }, []);
-
   const advanceCrashGame = useCallback((nextState: CrashGameState, duration: number) => {
     if (crashTimerRef.current) clearInterval(crashTimerRef.current);
     crashTimerRef.current = null;
     if (crashMultiplierIntervalRef.current) clearInterval(crashMultiplierIntervalRef.current);
     crashMultiplierIntervalRef.current = null;
-    
     setCrashGameState(nextState);
     setCrashCountdown(duration);
     setCrashPhaseTotalTime(duration);
-
     if (duration > 0) {
       crashTimerRef.current = window.setInterval(() => {
         setCrashCountdown(prevCountdown => {
@@ -348,8 +342,6 @@ const App: React.FC = () => {
         }
     }
   }, [setCrashGameState, setCrashCountdown, setCrashPhaseTotalTime]);
-
-
   const triggerNextCrashPhase = useCallback((currentPhaseEnded: CrashGameState) => {
     switch (currentPhaseEnded) {
       case CrashGameState.IDLE: 
@@ -373,25 +365,19 @@ const App: React.FC = () => {
         setCrashGameState(CrashGameState.RUNNING);
         setCrashCountdown(0); 
         setCrashRoundDataPoints(prev => prev.length === 0 ? [{ time: Date.now(), multiplier: 1.00 }] : prev); 
-        
         if (crashMultiplierIntervalRef.current) clearInterval(crashMultiplierIntervalRef.current);
         crashMultiplierIntervalRef.current = null;
-
         crashMultiplierIntervalRef.current = window.setInterval(() => {
           setCrashCurrentMultiplier(prevMultiplier => {
             const currentActualCrashTarget = crashTargetPointRef.current; 
-            
             let increment = 0.01; 
             if (prevMultiplier >= 5.00) increment = 0.01 * 1.45; 
             else if (prevMultiplier >= 2.00) increment = 0.01 * 1.30; 
-            
             let newMultiplier = parseFloat((prevMultiplier + increment).toFixed(4)); 
             setCrashRoundDataPoints(prevPoints => [...prevPoints, { time: Date.now(), multiplier: newMultiplier }]);
-            
             const currentBet = crashUserBetAmountRef.current;
             const autoCashoutTarget = crashUserAutoCashoutTargetRef.current;
             const alreadyCashedOut = crashUserCashedOutAtRef.current;
-
             if (currentBet && !alreadyCashedOut && autoCashoutTarget && newMultiplier >= autoCashoutTarget) {
               if (!currentActualCrashTarget || autoCashoutTarget <= currentActualCrashTarget) {
                 const winnings = currentBet * autoCashoutTarget; 
@@ -407,17 +393,13 @@ const App: React.FC = () => {
                 });
               }
             }
-            
             if (currentActualCrashTarget && newMultiplier >= currentActualCrashTarget) {
               if (crashMultiplierIntervalRef.current) clearInterval(crashMultiplierIntervalRef.current);
               crashMultiplierIntervalRef.current = null;
-              
               setCrashCurrentMultiplier(currentActualCrashTarget); 
               setCrashRoundDataPoints(prevPoints => [...prevPoints, { time: Date.now(), multiplier: currentActualCrashTarget }]);
-
               const finalBetAmount = crashUserBetAmountRef.current;
               const finalCashedOutAt = crashUserCashedOutAtRef.current; 
-
               if (finalBetAmount && !finalCashedOutAt) { 
                 setNotification(`CRASH! You lost your ${finalBetAmount.toFixed(2)} TON bet.`);
                  addUserCrashBetRecord({
@@ -429,10 +411,8 @@ const App: React.FC = () => {
               } else if (!finalBetAmount && !finalCashedOutAt) { 
                  setNotification(`CRASHED @ ${currentActualCrashTarget.toFixed(2)}x`);
               }
-              
               const newHistoryItem: CrashRound = { id: self.crypto.randomUUID(), crashPoint: currentActualCrashTarget, timestamp: Date.now() };
               setCrashHistory(prev => [newHistoryItem, ...prev.slice(0, CRASH_GAME_MAX_HISTORY - 1)]);
-              
               if(advanceCrashGameRef.current) advanceCrashGameRef.current(CrashGameState.CRASHED, CRASH_GAME_PHASE_TIMINGS.CRASHED_DISPLAY_DURATION);
               return currentActualCrashTarget; 
             }
@@ -454,13 +434,10 @@ const App: React.FC = () => {
       setCrashGameState, setCrashCountdown, setCrashAutoCashoutAtInput, setCrashUserAutoCashoutTarget,
       setBalance, setCrashRoundDataPoints, addUserCrashBetRecord
   ]);
-
   useEffect(() => {
     advanceCrashGameRef.current = advanceCrashGame;
     triggerNextCrashPhaseRef.current = triggerNextCrashPhase;
   }, [advanceCrashGame, triggerNextCrashPhase]);
-
-
   useEffect(() => {
     if (currentView === 'crash') {
       if (!crashTimerRef.current && !crashMultiplierIntervalRef.current) {
@@ -474,7 +451,6 @@ const App: React.FC = () => {
         setCrashUserAutoCashoutTarget(null);
         setCrashErrorMessage(null);
         setCrashRoundDataPoints([{ time: Date.now(), multiplier: 1.00 }]);
-        
         if (triggerNextCrashPhaseRef.current) {
           triggerNextCrashPhaseRef.current(CrashGameState.CRASHED); 
         }
@@ -485,7 +461,6 @@ const App: React.FC = () => {
       if (crashMultiplierIntervalRef.current) clearInterval(crashMultiplierIntervalRef.current);
       crashMultiplierIntervalRef.current = null;
     }
-    
     return () => {
       if (crashTimerRef.current) clearInterval(crashTimerRef.current);
       crashTimerRef.current = null;
@@ -493,8 +468,6 @@ const App: React.FC = () => {
       crashMultiplierIntervalRef.current = null;
     };
   }, [currentView]); 
-
-
   const handlePlaceCrashBet = useCallback(() => {
     if (crashGameState !== CrashGameState.BETTING) {
       setCrashErrorMessage("Betting phase is over.");
@@ -509,10 +482,8 @@ const App: React.FC = () => {
       setCrashErrorMessage("Insufficient balance.");
       return;
     }
-
     let autoTarget: number | null = null;
     let notificationMessage = `Bet of ${amount.toFixed(2)} TON placed!`;
-
     if (crashAutoCashoutAtInput) {
         const parsedAutoTarget = parseFloat(crashAutoCashoutAtInput);
         if (!isNaN(parsedAutoTarget) && parsedAutoTarget > 1.00) { 
@@ -523,26 +494,20 @@ const App: React.FC = () => {
         }
     }
     setCrashUserAutoCashoutTarget(autoTarget);
-
     setBalance(prev => prev - amount);
     setCrashUserBetAmount(amount);
     setCrashErrorMessage(null); 
     setNotification(notificationMessage);
   }, [crashGameState, crashBetAmountInput, balance, crashAutoCashoutAtInput, setNotification, setBalance, setCrashUserBetAmount, setCrashErrorMessage, setCrashUserAutoCashoutTarget]);
-
   const handleCashOutCrash = useCallback(() => {
     if (crashGameState !== CrashGameState.RUNNING || !crashUserBetAmountRef.current || crashUserCashedOutAtRef.current) return;
-    
     const betAmount = crashUserBetAmountRef.current;
     if(!betAmount) return; 
-
     const currentMultiplierForCashout = crashCurrentMultiplier; 
     const winnings = betAmount * currentMultiplierForCashout;
-
     setBalance(prev => prev + winnings);
     setCrashUserCashedOutAt(currentMultiplierForCashout); 
     setNotification(`Cashed out ${winnings.toFixed(2)} TON at ${currentMultiplierForCashout.toFixed(2)}x!`);
-
     addUserCrashBetRecord({
         betAmount: betAmount,
         outcome: UserCrashBetOutcome.WIN,
@@ -550,10 +515,7 @@ const App: React.FC = () => {
         crashPoint: crashTargetPointRef.current || currentMultiplierForCashout, 
         profit: winnings - betAmount,
     });
-
   }, [crashGameState, crashCurrentMultiplier, balance, setNotification, setBalance, setCrashUserCashedOutAt, addUserCrashBetRecord]); 
-
-
   const renderMainContent = () => {
     if (isOpening && selectedCase && wonNft) {
       return (
@@ -563,7 +525,6 @@ const App: React.FC = () => {
         </div>
       );
     }
-
     if (currentView === 'profile') {
       return <UserProfile 
                 inventory={inventory} 
@@ -573,7 +534,6 @@ const App: React.FC = () => {
                 userSoldItemsHistory={userSoldItemsHistory} 
               />;
     }
-    
     if (currentView === 'crash') {
       return <CrashGameView
                 gameState={crashGameState}
@@ -596,7 +556,6 @@ const App: React.FC = () => {
                 roundDataPoints={crashRoundDataPoints} 
              />;
     }
-
     if (currentView === 'cases') {
       if (viewingCaseDetails) {
         return <CaseDetailView 
@@ -634,6 +593,7 @@ const App: React.FC = () => {
         onShowCases={() => { setCurrentView('cases'); setViewingCaseDetails(null); }}
         onShowCrashGame={() => { setCurrentView('crash'); setViewingCaseDetails(null); }}
         currentView={currentView}
+        onOpenAddFundsModal={handleOpenAddFundsModal}
       />
 
       {notification && (
@@ -667,6 +627,14 @@ const App: React.FC = () => {
             </div>
           </div>
         </Modal>
+      )}
+
+      {showAddFundsModal && (
+        <AddFundsModal
+          onClose={handleCloseAddFundsModal}
+          onConfirmDeposit={handleConfirmDeposit}
+          currentBalance={balance}
+        />
       )}
     </div>
   );

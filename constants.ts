@@ -1,7 +1,7 @@
 import { Rarity, type CrashGamePhaseTimings } from './types';
 import type { NFTItem, Case } from './types';
 
-export const INITIAL_TON_BALANCE = 0; // Изначальный баланс изменен на 0
+export const INITIAL_TON_BALANCE = 0; // Изначальный баланс 0
 
 // IMPORTANT: Replace this with your actual TON wallet address where you want to receive deposits.
 // This is a placeholder address. If you don't change it, funds will be sent to this example address.
@@ -172,20 +172,4 @@ export const CRASH_GAME_PHASE_TIMINGS: CrashGamePhaseTimings = {
   BETTING_DURATION: 10000, // Players have 10 seconds to bet
   STARTING_ROUND_DURATION: 3000, // "Starting in 3, 2, 1..."
   CRASHED_DISPLAY_DURATION: 5000, // Show "CRASHED @ X.XXx" for 5 seconds
-  MULTIPLIER_INCREMENT_INTERVAL: 100, // Update multiplier every 100ms
-};
-
-export const CRASH_GAME_MAX_HISTORY = 10; // Show last 10 crash points (general game history)
-export const USER_CRASH_BET_HISTORY_MAX_LENGTH = 20; // Show last 20 user bet records
-export const USER_CASE_OPENING_HISTORY_MAX_LENGTH = 20; // Show last 20 user case opening records
-export const USER_SOLD_ITEMS_HISTORY_MAX_LENGTH = 20; // Show last 20 user sold item records
-
-
-export const CRASH_GAME_HOUSE_EDGE_PROBABILITY = 0.01; // 1% chance of instant 1.00x crash
-// Power for Math.pow(Math.random(), POWER_FOR_SKEW) in crash point generation.
-// Higher value = more skewed towards lower crash points.
-export const CRASH_POINT_SKEW_POWER = 2.5; 
-// To prevent extremely high multipliers (e.g. 1/(1-0.99999))
-// this limits the random factor `x` in `1/(1-x)` to this value.
-// e.g. 0.999 gives max ~1000x. 0.99 gives max ~100x.
-export const CRASH_POINT_MAX_RANDOM_FACTOR = 0.995; // Max theoretical multiplier around 200x
+  MULTIPLIER
