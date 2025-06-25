@@ -1,36 +1,21 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Telegram NFT Gifts</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body {
-      background-color: #0f172a; /* slate-900 */
-      color: #f1f5f9; /* slate-100 */
-      font-family: sans-serif;
-    }
-    /* Ensure TON Connect modal is visible above other elements */
-    [data-tc-modal-parent] {
-        z-index: 1000 !important;
-    }
-  </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.1.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
-    "react/": "https://esm.sh/react@^19.1.0/",
-    "@tonconnect/ui-react": "https://esm.sh/@tonconnect/ui-react@2",
-    "@tonconnect/sdk": "https://esm.sh/@tonconnect/sdk@3"
-  }
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import { TonConnectUIProvider } from '@tonconnect/ui-react';
+
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
 }
-</script>
-<link rel="stylesheet" href="index.css">
-</head>
-<body>
-  <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
-</html>
+
+// Абсолютный URL к манифесту для корректной работы на GitHub Pages
+const manifestUrl = 'https://zvzvzvzv11122.github.io/zeleboba/tonconnect-manifest.json';
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <TonConnectUIProvider manifestUrl={manifestUrl}>
+      <App />
+    </TonConnectUIProvider>
+  </React.StrictMode>
+);
